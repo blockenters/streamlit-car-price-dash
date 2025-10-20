@@ -3,43 +3,56 @@ import streamlit as st
 import joblib
 import pandas as pd
 
+
 def run_ml():
     st.subheader('구매 금액 예측하기')
 
-    st.info('아래 정보를 입력하면, 금액을 예측해 드립니다.')
+    st.info('아래 정보를 입력하면, 학습된 회귀 모델로 구매 금액을 예측합니다.')
 
-    gender_list = ['여자', '남자']
-    gender = st.radio('성별을 입력하세요', gender_list)
-    
-    if gender == gender_list[0] :
-        gender_data = 0
-    else :
-        gender_data = 1
+    col1, col2 = st.columns(2)
+    with col1:
+        gender = st.radio('성별', ['여자', '남자'])
+        age = st.number_input('나이', min_value=18, max_value=100, value=35)
+        salary = st.number_input('연봉 (달러)', min_value=0, value=50000, step=1000)
+    with col2:
+        debt = st.number_input('카드 빚 (달러)', min_value=0, value=3000, step=100)
+        worth = st.number_input('순자산 (달러)', min_value=0, value=50000, step=1000)
+        st.write('')
 
-    age = st.number_input('나이 입력', min_value=20, max_value=90)
+    gender_data = 0 if gender == '여자' else 1
 
-    salary = st.number_input('연봉 입력 (달러)', min_value=10000)
+    if st.button('예측하기'):
+        # 로컬 모델 파일 확인
+        model_path = './model/regressor.pkl'
+        try:
+            regressor = joblib.load(model_path)
+        except FileNotFoundError:
+            st.error(f'모델 파일을 찾을 수 없습니다: {model_path}')
+            st.info('먼저 학습한 모델을 `./model/regressor.pkl` 위치에 넣어주세요.')
+            return
+        except Exception as e:
+            st.error(f'모델을 불러오는 중 오류가 발생했습니다: {e}')
+            return
 
-    debt = st.number_input('카드빚 입력 (달러)' , min_value=0)
+        new_data = [{'Gender': gender_data, 'Age': age, 'Annual Salary': salary, 'Credit Card Debt': debt, 'Net Worth': worth}]
+        df_new = pd.DataFrame(new_data)
 
-    worth = st.number_input('자산 입력(달러)' , min_value=10000, step=1000)
+        try:
+            y_pred = regressor.predict(df_new)
+        except Exception as e:
+            st.error(f'예측 중 오류가 발생했습니다: {e}')
+            return
 
-    if st.button('예측하기!') :
+        pred_value = float(y_pred[0])
+        if pred_value < 0:
+            st.warning('예측 결과가 음수입니다. 입력값을 확인해주세요.')
+        else:
+            price = f"{int(round(pred_value)):,}"
+            st.success(f'예측한 구매 금액: {price} 달러')
 
-        # 모델을 가져온다.
-        regressor = joblib.load('./model/regressor.pkl')
+            st.markdown('**입력 요약**')
+            st.table(df_new)
 
-        # 유저가 입력한 데이터를, 예측할수 있게 가공해야 한다.
-        new_data = [ {'Gender' :gender_data , 'Age':age, 'Annual Salary':salary, 'Credit Card Debt':debt , 'Net Worth' : worth } ]    
-        df_new = pd.DataFrame(data=new_data)
-
-        # 예측하고, 결과를 보여준다.
-        y_pred = regressor.predict(df_new)  
-
-        if y_pred < 0 :
-            st.warning('구매 금액 예측이 어렵습니다.')
-        else :
-            price = format( round(y_pred[0]) ,  ',') 
-
-            st.info( f'예측한 금액은 {price} 달러입니다.' )
+            csv = df_new.to_csv(index=False).encode('utf-8')
+            st.download_button('입력값 CSV로 다운로드', csv, file_name='input_sample.csv', mime='text/csv')
         
